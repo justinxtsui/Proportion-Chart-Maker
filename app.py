@@ -23,24 +23,31 @@ if df is not None:
         'Select Category to Group Within Each X (e.g., Type of Grant)',
         [c for c in df.columns if c != x_axis_col]
     )
-    numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
-    default_value_col = numeric_cols[0] if numeric_cols else df.columns[0]
-    value_col = st.selectbox(
-        'Which column to use for the size of each segment (sum/count, e.g. Grant Amount, or Count)?',
-        [c for c in df.columns if c not in [x_axis_col, group_col]],
-        index=[c for c in df.columns if c not in [x_axis_col, group_col]].index(default_value_col)
-    )
-    st.write(f"You selected X-axis: {x_axis_col}, Group/Split: {group_col}, Value: {value_col}")
+    
+    use_sum = st.toggle('Use sum of values instead of count of rows', value=False)
+    
+    if use_sum:
+        numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+        value_col = st.selectbox(
+            'Select column to sum:',
+            [c for c in numeric_cols if c not in [x_axis_col, group_col]]
+        )
+        st.write(f"You selected X-axis: {x_axis_col}, Group/Split: {group_col}, Value: Sum of {value_col}")
+    else:
+        value_col = None
+        st.write(f"You selected X-axis: {x_axis_col}, Group/Split: {group_col}, Value: Count of rows")
 
     plot_df = df.copy()
     plot_df[x_axis_col] = plot_df[x_axis_col].astype(str)
     plot_df[group_col] = plot_df[group_col].astype(str)
     
-    if pd.api.types.is_numeric_dtype(plot_df[value_col]):
+    if use_sum and value_col:
         grouped = plot_df.groupby([x_axis_col, group_col])[value_col].sum().reset_index()
+        value_label = f'Sum of {value_col}'
     else:
-        grouped = plot_df.groupby([x_axis_col, group_col])[value_col].count().reset_index(name='count')
+        grouped = plot_df.groupby([x_axis_col, group_col]).size().reset_index(name='count')
         value_col = 'count'
+        value_label = 'Count'
     
     total = grouped.groupby(x_axis_col)[value_col].transform('sum')
     grouped['proportion'] = 100 * grouped[value_col] / total
@@ -73,7 +80,7 @@ if df is not None:
     ax.spines['bottom'].set_visible(False)
     ax.grid(False)
     ax.legend(loc='upper left', bbox_to_anchor=(1.05, 1), fontsize=16, frameon=False, prop={'family': 'Public Sans'}, labelspacing=1.2)
-    ax.set_title(f'Proportional Breakdown of {value_col} by {x_axis_col} and {group_col}', fontfamily='Public Sans', fontsize=16)
+    ax.set_title(f'Proportional Breakdown by {x_axis_col} and {group_col} ({value_label})', fontfamily='Public Sans', fontsize=16)
     st.pyplot(fig)
 else:
     st.info('Upload a file first to get started.')
