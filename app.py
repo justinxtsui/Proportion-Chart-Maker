@@ -1,12 +1,3 @@
-# Ensure openpyxl is installed for Excel reading
-try:
-    import openpyxl
-except ImportError:
-    import subprocess
-    import sys
-    subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'openpyxl', '--quiet'])
-    import openpyxl
-
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
