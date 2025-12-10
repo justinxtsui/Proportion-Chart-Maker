@@ -10,7 +10,7 @@ st.markdown('Upload a CSV or Excel file, select your X-Axis category, and the fi
 
 # --- Caching Functions for Performance ---
 
-@st.cache_data
+@st.cache_data   # use @st.cache if you're on an older Streamlit
 def load_data(uploaded_file):
     """Caches the data loading process."""
     if uploaded_file.name.endswith('.csv'):
@@ -68,8 +68,10 @@ if uploaded_file:
     
     with col2:
         # Ensure group_col is not the same as x_col
-        group_col = st.selectbox('Select Grouping/Split Category (The segments)', 
-                                 [c for c in df.columns if c != x_col])
+        group_col = st.selectbox(
+            'Select Grouping/Split Category (The segments)', 
+            [c for c in df.columns if c != x_col]
+        )
     
     st.markdown('---')
     
@@ -82,10 +84,12 @@ if uploaded_file:
     if use_sum:
         num_cols = df.select_dtypes(include=['number']).columns.tolist()
         if not num_cols:
-             st.error("No numeric columns found to sum.")
-             st.stop()
-        val_col = st.selectbox('Select Column to Sum:', 
-                               [c for c in num_cols if c not in [x_col, group_col]])
+            st.error("No numeric columns found to sum.")
+            st.stop()
+        val_col = st.selectbox(
+            'Select Column to Sum:', 
+            [c for c in num_cols if c not in [x_col, group_col]]
+        )
 
     # --- Calculation and Plotting ---
     if use_sum and not val_col:
@@ -99,32 +103,25 @@ if uploaded_file:
         # Plotting logic
         fig, ax = plt.subplots(figsize=(12, 6))
         
-        # Custom color pallet
+        # Custom color palette
         colors = ['#6F2A58', '#1B1B1B', '#EDD9E4', '#CCCCCC', '#B1B2FF', '#FFDAB9', '#BEE7B8', '#5679A6']
         
-        # Ensure index is treated as string for plotting if it was converted to numeric for sorting
         x_labels = pivot.index.astype(str)
+        x = np.arange(len(x_labels))
+        bottom = np.zeros(len(x_labels))
         
-        bottom = None
         for i, col in enumerate(pivot.columns):
             color = colors[i % len(colors)]
-            
-            ax.bar(x_labels, pivot[col], bottom=bottom, 
+            ax.bar(x, pivot[col], bottom=bottom, 
                    label=col, color=color, edgecolor='white', linewidth=0.5)
-                   
-            # Update the bottom for the next stack
-            if bottom is None:
-                bottom = pivot[col]
-            else:
-                bottom = bottom + pivot[col]
+            bottom = bottom + pivot[col]
         
         # Title and Labels
         ax.set_title(f'Proportional Breakdown by {x_col} ({value_metric})', fontsize=16)
         ax.set_ylabel('Percentage (%)', fontsize=12)
         ax.set_xlabel(x_col, fontsize=12)
 
-        # X-tick setup
-        # Use existing x_labels for cleaner display (no range() needed)
+        ax.set_xticks(x)
         ax.set_xticklabels(x_labels, rotation=45, ha='right')
 
         # Axis limits and legend
@@ -134,7 +131,7 @@ if uploaded_file:
         # Clean up chart borders
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
-        ax.spines['left'].set_visible(False) # Optional: sometimes useful to keep for a baseline
+        ax.spines['left'].set_visible(False)  # Optional
         ax.grid(axis='y', linestyle='--', alpha=0.7)
         
         st.pyplot(fig)
