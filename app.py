@@ -2,8 +2,10 @@
 try:
     import openpyxl
 except ImportError:
+    import subprocess
     import sys
-    !{sys.executable} -m pip install openpyxl --quiet
+    subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'openpyxl', '--quiet'])
+    import openpyxl
 
 import streamlit as st
 import pandas as pd
@@ -39,19 +41,18 @@ if df is not None:
     )
     st.write(f"You selected X-axis: {x_axis_col}, Group/Split: {group_col}, Value: {value_col}")
 
-    # Prepare the data for plotting
     plot_df = df.copy()
     if pd.api.types.is_numeric_dtype(plot_df[value_col]):
         grouped = plot_df.groupby([x_axis_col, group_col])[value_col].sum().reset_index()
     else:
         grouped = plot_df.groupby([x_axis_col, group_col])[value_col].count().reset_index(name='count')
-        value_col = 'count'  # update for plotting
+        value_col = 'count'
     
     total = grouped.groupby(x_axis_col)[value_col].transform('sum')
     grouped['proportion'] = 100 * grouped[value_col] / total
     pivot_df = grouped.pivot(index=x_axis_col, columns=group_col, values='proportion').fillna(0)
     pivot_df = pivot_df.loc[sorted(pivot_df.index)]
-    # Plot
+    
     fig, ax = plt.subplots(figsize=(14, 8))
     colors = ['#EDD9E4', '#6F2A58', '#1B1B1B', '#CCCCCC', '#B1B2FF', '#FFDAB9', '#BEE7B8', '#5679A6', '#FFE156']
     for i, seg in enumerate(pivot_df.columns):
