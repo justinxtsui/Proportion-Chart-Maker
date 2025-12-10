@@ -33,6 +33,9 @@ if df is not None:
     st.write(f"You selected X-axis: {x_axis_col}, Group/Split: {group_col}, Value: {value_col}")
 
     plot_df = df.copy()
+    plot_df[x_axis_col] = plot_df[x_axis_col].astype(str)
+    plot_df[group_col] = plot_df[group_col].astype(str)
+    
     if pd.api.types.is_numeric_dtype(plot_df[value_col]):
         grouped = plot_df.groupby([x_axis_col, group_col])[value_col].sum().reset_index()
     else:
@@ -42,7 +45,12 @@ if df is not None:
     total = grouped.groupby(x_axis_col)[value_col].transform('sum')
     grouped['proportion'] = 100 * grouped[value_col] / total
     pivot_df = grouped.pivot(index=x_axis_col, columns=group_col, values='proportion').fillna(0)
-    pivot_df = pivot_df.loc[sorted(pivot_df.index)]
+    
+    try:
+        pivot_df.index = pd.to_numeric(pivot_df.index)
+        pivot_df = pivot_df.sort_index()
+    except:
+        pivot_df = pivot_df.sort_index()
     
     fig, ax = plt.subplots(figsize=(14, 8))
     colors = ['#EDD9E4', '#6F2A58', '#1B1B1B', '#CCCCCC', '#B1B2FF', '#FFDAB9', '#BEE7B8', '#5679A6', '#FFE156']
