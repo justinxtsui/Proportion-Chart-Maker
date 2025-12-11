@@ -16,19 +16,32 @@ st.set_page_config(
 STYLED_CATEGORIES = {
     # This style will be applied to the first category found in the splitting column
     'CATEGORY_1': {
-        'color': '#EDD9E4',        # Light purple (Pipeline)
+        'color': '#EDD9E4',        # Light purple
         'text_color': 'black',     # Black text
-        'suffix': ' scaleups',     # Keep the stylistic suffix
+        'suffix': ' scaleups',     
         'font_family': 'Public Sans, sans-serif'
     },
     # This style will be applied to the second category found
     'CATEGORY_2': {
-        'color': '#6F2A58',        # Dark purple (Primary)
-        'text_color': '#D3D3D3',   # Light Gray for Primary text
-        'suffix': ' scaleups',     # Keep the stylistic suffix
+        'color': '#6F2A58',        # Dark purple
+        'text_color': '#D3D3D3',   # Light Gray text
+        'suffix': ' scaleups',     
         'font_family': 'Public Sans, sans-serif'
     }
 }
+
+# --- Font Injection Function ---
+def inject_public_sans_font():
+    """Injects the Google Fonts stylesheet link into the Streamlit app."""
+    # This ensures the browser loads Public Sans, making it available for Plotly/SVG export.
+    st.markdown(
+        """
+        <style>
+        @import url('https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;700&display=swap');
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
 
 # --- Data Loading Function (No change) ---
 @st.cache_data
@@ -53,11 +66,11 @@ def load_data(uploaded_file):
         return pd.DataFrame()
 
 
-# --- Visualization Function (Final Stable Version) ---
+# --- Visualization Function (No functional changes, ensures font specification) ---
 def create_styled_proportional_bar_chart(data, x_col, color_col):
     """
-    Creates a Plotly proportional stacked bar chart, dynamically mapping styles,
-    and strictly disabling interactivity.
+    Creates a Plotly proportional stacked bar chart, maximizing stability and
+    strictly disabling interactivity while enforcing Public Sans.
     """
     if data.empty or x_col is None or color_col is None:
         return None
@@ -119,7 +132,6 @@ def create_styled_proportional_bar_chart(data, x_col, color_col):
             
             marker_color = style['color']
             text_color = style['text_color']
-            # FIX: Use the actual category name + the " scaleups" suffix
             plot_name = f'{category}{style["suffix"]}' 
             
             # Add Bar Trace
@@ -130,7 +142,7 @@ def create_styled_proportional_bar_chart(data, x_col, color_col):
                 marker_color=marker_color,
                 base=cat_data['Bottom'],
                 width=0.6, 
-                hoverinfo='skip', # Disables the hover effect
+                hoverinfo='skip', 
                 showlegend=True 
             ))
 
@@ -145,7 +157,7 @@ def create_styled_proportional_bar_chart(data, x_col, color_col):
                         text=f"{proportion:.1f}%",
                         showarrow=False,
                         font=dict(
-                            family=style['font_family'], # Use Public Sans
+                            family=style['font_family'], 
                             size=14, 
                             color=text_color, 
                             weight='bold'
@@ -169,30 +181,28 @@ def create_styled_proportional_bar_chart(data, x_col, color_col):
                 showline=False, 
                 fixedrange=True,
             ),
-            bargap=0.3, # For chunky bars
+            bargap=0.3, 
             
+            # --- Ensure Public Sans on X-axis labels ---
             xaxis=dict(
                 showgrid=False,
-                # Set font to Public Sans
                 tickfont=dict(size=14, family="Public Sans, sans-serif", color='black', weight='bold'),
                 showline=False 
             ),
-            # Matplotlib Title 
+            # --- Ensure Public Sans on Title ---
             title={
                 'text': 'Proportion of Grant Amounts by Year', 
-                # Set font to Public Sans
-                'font': {'size': 20, 'weight': 'bold', 'family': 'Public Sans, sans-serif'}, 
+                'font': {'size': 20, 'weight': 'bold', 'family': "Public Sans, sans-serif"}, 
                 'y':0.95, 'x':0.5, 'xanchor': 'center', 'yanchor': 'top',
                 'pad': {'b': 20} 
             },
-            # Legend styling: fixed position, large font, Public Sans
+            # --- Ensure Public Sans on Legend ---
             legend=dict(
                 orientation="v",
                 yanchor="middle",
                 y=0.5,
                 xanchor="left",
                 x=1.05, 
-                # Set font to Public Sans
                 font=dict(size=16, family="Public Sans, sans-serif", color='black'),
                 traceorder="normal",
                 bgcolor='rgba(0,0,0,0)', 
@@ -203,7 +213,7 @@ def create_styled_proportional_bar_chart(data, x_col, color_col):
             
             # Disable all interactive tools
             modebar_remove=['zoom', 'pan', 'select', 'lasso', 'autoscale', 'reset', 'toimage', 'hovercompare', 'togglehover'],
-            dragmode=False # Prevents mouse interaction
+            dragmode=False 
         )
         
         fig.update_xaxes(showline=False)
@@ -232,8 +242,11 @@ def get_svg_download_link(fig, filename="chart.svg"):
     return href
 
 
-# --- Main App Logic (No change) ---
+# --- Main App Logic (Final) ---
 def main():
+    # Inject font link at the start of the app execution
+    inject_public_sans_font() 
+    
     st.title("📊 Proportional Stacked Bar Chart Tool (SVG Replica)")
     st.markdown("Generates a static chart matching the provided design exactly, ready for SVG download.")
 
