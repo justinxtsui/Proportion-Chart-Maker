@@ -12,6 +12,8 @@ st.set_page_config(
 )
 
 # Define the custom colors from the original Matplotlib script
+# NOTE: The categories in the 'Splitting Category' must match these keys ('Pipeline', 'Primary') 
+# for the custom colors and text colors to work correctly.
 CUSTOM_COLORS = {
     'Pipeline': '#EDD9E4',  # Light color for Pipeline
     'Primary': '#6F2A58'    # Dark color for Primary
@@ -30,7 +32,6 @@ def load_data(uploaded_file):
             st.error("Unsupported file type. Please upload a CSV or Excel file (.csv, .xlsx, .xls).")
             return pd.DataFrame()
         
-        # Simple cleanup: convert object columns to categorical
         for col in df.select_dtypes(include=['object']).columns:
             if df[col].nunique() < 50:
                 df[col] = df[col].astype('category')
@@ -41,10 +42,11 @@ def load_data(uploaded_file):
         return pd.DataFrame()
 
 
-# --- Visualization Function (Customized for Proportional Stacked Bars) ---
+# --- Visualization Function (Corrected and Customized for Proportional Stacked Bars) ---
 def create_styled_proportional_bar_chart(data, x_col, color_col, agg_col, agg_func):
     """
-    Creates a Plotly proportional stacked bar chart, mimicking the original design.
+    Creates a Plotly proportional stacked bar chart, mimicking the original design
+    and ensuring the proportional logic is correctly applied (sum to 100%).
     """
     if data.empty or x_col is None or color_col is None or agg_col is None:
         return
@@ -62,50 +64,55 @@ def create_styled_proportional_bar_chart(data, x_col, color_col, agg_col, agg_fu
         summary_df = data.groupby([x_col, color_col]).agg({agg_col: agg_func}).reset_index()
         summary_df.columns = [x_col, color_col, 'Aggregated Value']
         
-        # Calculate Proportions (Essential for the requested look)
+        # Calculate Proportions (Essential for the requested look: always 0-100%)
         total_by_x = summary_df.groupby(x_col)['Aggregated Value'].transform('sum')
         summary_df['Proportion'] = (summary_df['Aggregated Value'] / total_by_x) * 100
         
-        # Sort by color_col so the stacking order is consistent (e.g., Pipeline always bottom)
-        # Note: You need to know the category names, e.g., 'Pipeline', 'Primary'
-        
-        # 2. Create the Plotly Figure object (using go.Figure to control traces)
+        # 2. Create the Plotly Figure object
         fig = go.Figure()
         
-        categories = summary_df[color_col].unique()
-        
-        # Use a list of categories to control the order and colors
-        ordered_categories = ['Pipeline', 'Primary'] # Assuming these are the categories
-        
-        # --- Add Traces and Data Labels ---
+        # Ensure a defined order for stacking and colors. Use keys from CUSTOM_COLORS if possible.
+        ordered_categories = [cat for cat in CUSTOM_COLORS.keys() if cat in summary_df[color_col].unique()]
+        # Add any other categories found in the data, just in case
+        for cat in summary_df[color_col].unique():
+            if cat not in ordered_categories:
+                ordered_categories.append(cat)
+                
+        # Initialize the baseline for stacking
         current_bottom = pd.Series([0.0] * summary_df[x_col].nunique(), 
                                     index=summary_df[x_col].unique()).sort_index()
 
+        # --- Add Traces and Data Labels ---
         for category in ordered_categories:
             cat_data = summary_df[summary_df[color_col] == category].copy()
             
-            # Merge with current_bottom to align bars correctly
+            # Reindex to ensure all X categories are present, which introduces NaNs
             cat_data = cat_data.set_index(x_col).reindex(current_bottom.index).reset_index()
             cat_data['Bottom'] = current_bottom
+            
+            # --- FIX: Only fill numerical columns to avoid TypeError ---
+            numerical_cols_to_fill = ['Aggregated Value', 'Proportion', 'Bottom']
+            cat_data[numerical_cols_to_fill] = cat_data[numerical_cols_to_fill].fillna(0)
+            # --- END FIX ---
+            
             cat_data['Top'] = cat_data['Bottom'] + cat_data['Proportion']
-            cat_data.fillna(0, inplace=True)
+            
+            # Determine color and text color based on category name
+            marker_color = CUSTOM_COLORS.get(category, '#A9A9A9') # Default to Dark Gray
+            text_color = 'black' if category == 'Pipeline' else '#D3D3D3' # Light gray
             
             # Add Bar Trace
             fig.add_trace(go.Bar(
                 x=cat_data[x_col],
                 y=cat_data['Proportion'],
-                name=category + ' scaleups', # Match original legend labels
-                marker_color=CUSTOM_COLORS.get(category, 'gray'),
-                # Set 'base' to create the stack from the previous bar's top
+                name=f'{category} scaleups' if category in CUSTOM_COLORS else category, # Match original legend
+                marker_color=marker_color,
                 base=cat_data['Bottom'],
-                customdata=cat_data[['Proportion']], # Store proportion for labels
+                customdata=cat_data[['Proportion']],
                 hovertemplate=f"{x_col}: %{{x}}<br>{category}: %{{customdata[0]:.1f}}%<extra></extra>"
             ))
             
-            # --- Add Data Labels (Percentage inside bars) ---
-            # Define label text and color based on category
-            text_color = 'black' if category == 'Pipeline' else '#D3D3D3' # Light gray
-            
+            # Add Data Labels (Percentage inside bars)
             for i, row in cat_data.iterrows():
                 proportion = row['Proportion']
                 if proportion > 5: # Only label if proportion is large enough
@@ -121,7 +128,6 @@ def create_styled_proportional_bar_chart(data, x_col, color_col, agg_col, agg_fu
                             color=text_color,
                             weight='bold'
                         ),
-                        # Ensure labels are centered and on the stack
                         xanchor='center',
                         yanchor='middle'
                     )
@@ -131,45 +137,41 @@ def create_styled_proportional_bar_chart(data, x_col, color_col, agg_col, agg_fu
         
         # 3. Apply Styling
         
-        agg_name = "Count" if agg_func == pd.Series.count else "Sum"
-        
         fig.update_layout(
             barmode='stack',
-            xaxis_title=None, # X-axis title removed in original Matplotlib
-            yaxis_title=None, # Y-axis title removed in original Matplotlib
+            xaxis_title=None,
+            yaxis_title=None,
             yaxis=dict(
-                range=[0, 100], # Set to 0-100%
+                range=[0, 100], 
                 showgrid=False,
-                showticklabels=False, # Y-axis labels removed
+                showticklabels=False,
+                fixedrange=True, # Prevent user from zooming on Y-axis
             ),
             xaxis=dict(
                 showgrid=False,
                 tickfont=dict(size=12, family="Public Sans"),
-                # Remove ticks/lines
                 showline=False 
             ),
             title={
-                'text': 'Proportion of Grant Amounts by Year',
+                'text': f'Proportion of {agg_col} by {x_col}', # Dynamic title update
                 'font': {'size': 14, 'weight': 'bold', 'family': 'Public Sans'},
                 'y':0.95, 'x':0.5, 'xanchor': 'center', 'yanchor': 'top'
             },
-            # Match original legend placement
             legend=dict(
                 orientation="v",
                 yanchor="middle",
                 y=0.5,
                 xanchor="left",
-                x=1.05, # Place outside the plot area
+                x=1.05, 
                 font=dict(size=18, family="Public Sans"),
                 traceorder="normal",
-                bgcolor='rgba(0,0,0,0)', # Transparent background
+                bgcolor='rgba(0,0,0,0)',
             ),
-            margin=dict(l=20, r=200, t=60, b=20), # Add margin for legend space
-            plot_bgcolor='white', # Remove background color
+            margin=dict(l=20, r=200, t=60, b=20),
+            plot_bgcolor='white',
             paper_bgcolor='white',
         )
 
-        # Remove Spines (borders)
         fig.update_xaxes(showline=False)
         fig.update_yaxes(showline=False)
         
@@ -218,11 +220,10 @@ def main():
         index=0 if categorical_cols else None
     )
     
-    # Select Splitting/Color Category (Crucial to match original categories for color/labels)
-    # NOTE: To perfectly match the colors and labels, the selected column MUST contain 'Pipeline' and 'Primary' values.
+    # Select Splitting/Color Category
     color_options = [col for col in categorical_cols if col != selected_x_col]
     selected_color_col = st.sidebar.selectbox(
-        "Select **Splitting Category** (Should contain 'Pipeline' and 'Primary' values)",
+        "Select **Splitting Category** (Bar Stacking/Color)",
         options=color_options,
         index=0 if color_options else None
     )
@@ -260,10 +261,13 @@ def main():
         final_agg_col = selected_agg_col if selected_agg_col else selected_x_col 
 
         st.markdown("---")
-        st.info(f"**NOTE:** This chart is forced into a **proportional stacked bar chart (0-100%)** using the categories 'Pipeline' and 'Primary' for colors/labels, as per the original design request. The **Y-axis percentage labels** and **custom colors** are now included.")
+        st.info(
+            "The chart below is a **proportional stacked bar chart (0-100%)**. "
+            "The segments in each bar represent the percentage contribution of the "
+            "Splitting Category to the total value/count of the X-Axis Category."
+        )
         
         with st.container():
-            # Use the specialized styling function
             create_styled_proportional_bar_chart(
                 df.copy(), 
                 selected_x_col, 
