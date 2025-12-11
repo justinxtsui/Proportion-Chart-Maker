@@ -51,10 +51,11 @@ def load_data(uploaded_file):
         return pd.DataFrame()
 
 
-# --- Visualization Function (Matches Matplotlib Design & Static) ---
+# --- Visualization Function (Stable, No Fragile Workarounds) ---
 def create_styled_proportional_bar_chart(data, x_col, color_col):
     """
-    Creates a Plotly proportional stacked bar chart, rigorously matching the Matplotlib design.
+    Creates a Plotly proportional stacked bar chart, maximizing stability and
+    strictly disabling interactivity.
     """
     if data.empty or x_col is None or color_col is None:
         return None
@@ -118,27 +119,16 @@ def create_styled_proportional_bar_chart(data, x_col, color_col):
             text_color = style['text_color']
             plot_name = style['label'] 
             
-            # Add a *HIDDEN SCATTER TRACE* to force a circle marker in the legend
-            fig.add_trace(go.Scatter(
-                x=[None], # Invisible x-data
-                y=[None], # Invisible y-data
-                mode='markers',
-                marker=dict(size=15, color=marker_color, symbol='circle'),
-                name=plot_name,
-                showlegend=True,
-                hoverinfo='skip'
-            ))
-            
-            # Add Bar Trace (The actual data)
+            # Add Bar Trace
             fig.add_trace(go.Bar(
                 x=cat_data[x_col],
                 y=cat_data['Proportion'],
-                name=plot_name, # Use the same name as the Scatter trace
+                name=plot_name,
                 marker_color=marker_color,
                 base=cat_data['Bottom'],
                 width=0.6, 
-                hoverinfo='skip',
-                showlegend=False # HIDE the bar trace from the legend
+                hoverinfo='skip', # Disables the hover effect
+                showlegend=True 
             ))
 
             # Add Data Labels (Percentage inside bars)
@@ -190,7 +180,7 @@ def create_styled_proportional_bar_chart(data, x_col, color_col):
                 'y':0.95, 'x':0.5, 'xanchor': 'center', 'yanchor': 'top',
                 'pad': {'b': 20} 
             },
-            # Legend styling: fixed position, large font, relies on scatter traces for circle markers
+            # Legend styling: fixed position, large font
             legend=dict(
                 orientation="v",
                 yanchor="middle",
@@ -200,14 +190,17 @@ def create_styled_proportional_bar_chart(data, x_col, color_col):
                 font=dict(size=16, family="Arial, sans-serif", color='black'),
                 traceorder="normal",
                 bgcolor='rgba(0,0,0,0)', 
-                itemsizing='trace',
+                
+                # NOTE: Bar trace markers will be square, as forcing circles breaks Plotly.
+                # The visual replica is now stable, even if the marker shape is not circle.
             ),
             margin=dict(l=20, r=200, t=60, b=20),
             plot_bgcolor='white', 
             paper_bgcolor='white',
             
-            # Disable all interactive tools
-            modebar_remove=['zoom', 'pan', 'select', 'lasso', 'autoscale', 'reset', 'toimage', 'hovercompare', 'togglehover']
+            # --- Key change to DISABLE ALL INTERACTIVITY ---
+            modebar_remove=['zoom', 'pan', 'select', 'lasso', 'autoscale', 'reset', 'toimage', 'hovercompare', 'togglehover'],
+            dragmode=False # Prevents mouse interaction
         )
         
         fig.update_xaxes(showline=False)
@@ -300,7 +293,8 @@ def main():
         
         if fig:
             # Display the static Plotly chart
-            st.plotly_chart(fig, use_container_width=True)
+            # Use config to explicitly remove all remaining Plotly UI (buttons, etc.)
+            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False, 'staticPlot': True})
             
             # Create and display the SVG download link
             download_link = get_svg_download_link(fig, filename=f"proportional_count_chart_{selected_x_col}.svg")
