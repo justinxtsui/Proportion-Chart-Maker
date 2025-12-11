@@ -14,34 +14,21 @@ st.set_page_config(
 
 # Define the custom styles tied to the Matplotlib code's two categories
 STYLED_CATEGORIES = {
-    # This style will be applied to the first category found in the splitting column
+    # This style will be applied to the first category found (e.g., False)
     'CATEGORY_1': {
         'color': '#EDD9E4',        # Light purple
-        'text_color': 'black',     # Black text
-        'suffix': ' scaleups',     
+        'text_color': 'black',     # Black text for light background
+        'suffix': '',              # FIX: Removed ' scaleups'
         'font_family': 'Public Sans, sans-serif'
     },
-    # This style will be applied to the second category found
+    # This style will be applied to the second category found (e.g., True)
     'CATEGORY_2': {
         'color': '#6F2A58',        # Dark purple
-        'text_color': '#D3D3D3',   # Light Gray text
-        'suffix': ' scaleups',     
+        'text_color': '#F0F0F0',   # FIX: Very light gray/off-white for max contrast on dark background
+        'suffix': '',              # FIX: Removed ' scaleups'
         'font_family': 'Public Sans, sans-serif'
     }
 }
-
-# --- Font Injection Function ---
-def inject_public_sans_font():
-    """Injects the Google Fonts stylesheet link into the Streamlit app."""
-    # This ensures the browser loads Public Sans, making it available for Plotly/SVG export.
-    st.markdown(
-        """
-        <style>
-        @import url('https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;700&display=swap');
-        </style>
-        """,
-        unsafe_allow_html=True
-    )
 
 # --- Data Loading Function (No change) ---
 @st.cache_data
@@ -66,11 +53,10 @@ def load_data(uploaded_file):
         return pd.DataFrame()
 
 
-# --- Visualization Function (No functional changes, ensures font specification) ---
+# --- Visualization Function (Final Stable Version) ---
 def create_styled_proportional_bar_chart(data, x_col, color_col):
     """
-    Creates a Plotly proportional stacked bar chart, maximizing stability and
-    strictly disabling interactivity while enforcing Public Sans.
+    Creates a Plotly proportional stacked bar chart, strictly enforcing final styles.
     """
     if data.empty or x_col is None or color_col is None:
         return None
@@ -132,6 +118,7 @@ def create_styled_proportional_bar_chart(data, x_col, color_col):
             
             marker_color = style['color']
             text_color = style['text_color']
+            # FIX: Only use the category name
             plot_name = f'{category}{style["suffix"]}' 
             
             # Add Bar Trace
@@ -183,21 +170,20 @@ def create_styled_proportional_bar_chart(data, x_col, color_col):
             ),
             bargap=0.3, 
             
-            # --- Ensure Public Sans on X-axis labels ---
             xaxis=dict(
                 showgrid=False,
                 tickfont=dict(size=14, family="Public Sans, sans-serif", color='black', weight='bold'),
                 showline=False 
             ),
-            # --- Ensure Public Sans on Title ---
             title={
                 'text': 'Proportion of Grant Amounts by Year', 
                 'font': {'size': 20, 'weight': 'bold', 'family': "Public Sans, sans-serif"}, 
                 'y':0.95, 'x':0.5, 'xanchor': 'center', 'yanchor': 'top',
                 'pad': {'b': 20} 
             },
-            # --- Ensure Public Sans on Legend ---
+            # FIX: Legend Heading is the column name
             legend=dict(
+                title=dict(text=color_col), # FIX: Set title to selected column name
                 orientation="v",
                 yanchor="middle",
                 y=0.5,
