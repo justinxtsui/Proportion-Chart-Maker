@@ -16,19 +16,21 @@ st.set_page_config(
 STYLED_CATEGORIES = {
     # This style will be applied to the first category found in the splitting column
     'CATEGORY_1': {
-        'color': '#EDD9E4', 
-        'text_color': 'black',
-        'label': 'Pipeline scaleups'
+        'color': '#EDD9E4',        # Light purple (Pipeline)
+        'text_color': 'black',     # Black text
+        'suffix': ' scaleups',     # Keep the stylistic suffix
+        'font_family': 'Public Sans, sans-serif'
     },
     # This style will be applied to the second category found
     'CATEGORY_2': {
-        'color': '#6F2A58', 
-        'text_color': '#D3D3D3', # Light gray
-        'label': 'Primary scaleups'
+        'color': '#6F2A58',        # Dark purple (Primary)
+        'text_color': '#D3D3D3',   # Light Gray for Primary text
+        'suffix': ' scaleups',     # Keep the stylistic suffix
+        'font_family': 'Public Sans, sans-serif'
     }
 }
 
-# --- Data Loading Function ---
+# --- Data Loading Function (No change) ---
 @st.cache_data
 def load_data(uploaded_file):
     """Loads data from an uploaded CSV or Excel file."""
@@ -51,11 +53,11 @@ def load_data(uploaded_file):
         return pd.DataFrame()
 
 
-# --- Visualization Function (Stable, No Fragile Workarounds) ---
+# --- Visualization Function (Final Stable Version) ---
 def create_styled_proportional_bar_chart(data, x_col, color_col):
     """
-    Creates a Plotly proportional stacked bar chart, maximizing stability and
-    strictly disabling interactivity.
+    Creates a Plotly proportional stacked bar chart, dynamically mapping styles,
+    and strictly disabling interactivity.
     """
     if data.empty or x_col is None or color_col is None:
         return None
@@ -117,7 +119,8 @@ def create_styled_proportional_bar_chart(data, x_col, color_col):
             
             marker_color = style['color']
             text_color = style['text_color']
-            plot_name = style['label'] 
+            # FIX: Use the actual category name + the " scaleups" suffix
+            plot_name = f'{category}{style["suffix"]}' 
             
             # Add Bar Trace
             fig.add_trace(go.Bar(
@@ -142,7 +145,7 @@ def create_styled_proportional_bar_chart(data, x_col, color_col):
                         text=f"{proportion:.1f}%",
                         showarrow=False,
                         font=dict(
-                            family="Arial, sans-serif", 
+                            family=style['font_family'], # Use Public Sans
                             size=14, 
                             color=text_color, 
                             weight='bold'
@@ -170,35 +173,35 @@ def create_styled_proportional_bar_chart(data, x_col, color_col):
             
             xaxis=dict(
                 showgrid=False,
-                tickfont=dict(size=14, family="Public Sans", color='black', weight='bold'),
+                # Set font to Public Sans
+                tickfont=dict(size=14, family="Public Sans, sans-serif", color='black', weight='bold'),
                 showline=False 
             ),
-            # Matplotlib Title (using aggressive font sizing/weight for visual match)
+            # Matplotlib Title 
             title={
                 'text': 'Proportion of Grant Amounts by Year', 
-                'font': {'size': 20, 'weight': 'bold', 'family': 'Arial, sans-serif'}, 
+                # Set font to Public Sans
+                'font': {'size': 20, 'weight': 'bold', 'family': 'Public Sans, sans-serif'}, 
                 'y':0.95, 'x':0.5, 'xanchor': 'center', 'yanchor': 'top',
                 'pad': {'b': 20} 
             },
-            # Legend styling: fixed position, large font
+            # Legend styling: fixed position, large font, Public Sans
             legend=dict(
                 orientation="v",
                 yanchor="middle",
                 y=0.5,
                 xanchor="left",
                 x=1.05, 
-                font=dict(size=16, family="Arial, sans-serif", color='black'),
+                # Set font to Public Sans
+                font=dict(size=16, family="Public Sans, sans-serif", color='black'),
                 traceorder="normal",
                 bgcolor='rgba(0,0,0,0)', 
-                
-                # NOTE: Bar trace markers will be square, as forcing circles breaks Plotly.
-                # The visual replica is now stable, even if the marker shape is not circle.
             ),
             margin=dict(l=20, r=200, t=60, b=20),
             plot_bgcolor='white', 
             paper_bgcolor='white',
             
-            # --- Key change to DISABLE ALL INTERACTIVITY ---
+            # Disable all interactive tools
             modebar_remove=['zoom', 'pan', 'select', 'lasso', 'autoscale', 'reset', 'toimage', 'hovercompare', 'togglehover'],
             dragmode=False # Prevents mouse interaction
         )
@@ -213,12 +216,11 @@ def create_styled_proportional_bar_chart(data, x_col, color_col):
         st.exception(e)
         return None
 
-# --- Download SVG Function ---
+# --- Download SVG Function (No change) ---
 def get_svg_download_link(fig, filename="chart.svg"):
     """Generates an HTML download link for the SVG file using base64 encoding."""
     buffer = BytesIO()
     try:
-        # Requires the 'kaleido' library
         fig.write_image(buffer, format="svg", width=1400, height=800, scale=1) 
     except ValueError as e:
         st.error("Error generating SVG. Please ensure you have the 'kaleido' library installed: `pip install kaleido`")
@@ -230,7 +232,7 @@ def get_svg_download_link(fig, filename="chart.svg"):
     return href
 
 
-# --- Main App Logic (Streamlined UI, NO DASHBOARD features) ---
+# --- Main App Logic (No change) ---
 def main():
     st.title("📊 Proportional Stacked Bar Chart Tool (SVG Replica)")
     st.markdown("Generates a static chart matching the provided design exactly, ready for SVG download.")
@@ -293,7 +295,6 @@ def main():
         
         if fig:
             # Display the static Plotly chart
-            # Use config to explicitly remove all remaining Plotly UI (buttons, etc.)
             st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False, 'staticPlot': True})
             
             # Create and display the SVG download link
