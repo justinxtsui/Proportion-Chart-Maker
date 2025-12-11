@@ -51,11 +51,10 @@ def load_data(uploaded_file):
         return pd.DataFrame()
 
 
-# --- Visualization Function (Dynamic Category Mapping) ---
+# --- Visualization Function (Matches Matplotlib Design & Static) ---
 def create_styled_proportional_bar_chart(data, x_col, color_col):
     """
-    Creates a Plotly proportional stacked bar chart, dynamically mapping the first two categories
-    in color_col to the fixed Matplotlib styles.
+    Creates a Plotly proportional stacked bar chart, rigorously matching the Matplotlib design.
     """
     if data.empty or x_col is None or color_col is None:
         return None
@@ -74,8 +73,6 @@ def create_styled_proportional_bar_chart(data, x_col, color_col):
         
         # 2. Dynamic Style Mapping
         unique_categories = summary_df[color_col].astype(str).unique()
-        
-        # Ensure categories are sorted consistently for repeatable results
         unique_categories.sort() 
         
         if len(unique_categories) < 2:
@@ -92,7 +89,6 @@ def create_styled_proportional_bar_chart(data, x_col, color_col):
         # 3. Create the Plotly Figure object
         fig = go.Figure()
         
-        # We only iterate over the categories we mapped (the first two)
         ordered_categories = list(category_map.keys())
 
         current_bottom = pd.Series([0.0] * summary_df[x_col].nunique(), 
@@ -130,13 +126,20 @@ def create_styled_proportional_bar_chart(data, x_col, color_col):
                 marker_color=marker_color,
                 base=cat_data['Bottom'],
                 width=0.6, 
-                hoverinfo='skip' 
+                hoverinfo='skip',
+                # Set legend marker to circle (for non-bar trace types)
+                legendgroup=plot_name,
+                showlegend=True 
             ))
 
             # Add Data Labels (Percentage inside bars)
             for i, row in cat_data.iterrows():
                 proportion = row['Proportion']
-                if proportion > 5:
+                # The provided image shows labels for both large and small segments (e.g., 25.4% and 74.6%)
+                # We will keep the > 5% logic but understand the image shows labels for all
+                # if proportion > 5:
+                # Based on the image, the two main segments always show labels. We assume the largest two are visible.
+                if proportion > 0: 
                     y_position = row['Bottom'] + (proportion / 2)
                     fig.add_annotation(
                         x=row[x_col],
@@ -144,8 +147,9 @@ def create_styled_proportional_bar_chart(data, x_col, color_col):
                         text=f"{proportion:.1f}%",
                         showarrow=False,
                         font=dict(
-                            family="Public Sans",
-                            size=12,
+                            # Font in image is bolder and potentially larger/different family than Public Sans
+                            family="Arial, sans-serif", 
+                            size=14, # Slightly larger for better match
                             color=text_color, 
                             weight='bold'
                         ),
@@ -168,26 +172,35 @@ def create_styled_proportional_bar_chart(data, x_col, color_col):
                 showline=False, 
                 fixedrange=True,
             ),
+            # Increase bar width by reducing the spacing between categories
+            bargap=0.3, # Adjust bar spacing (default is 0.2)
+            
             xaxis=dict(
                 showgrid=False,
-                tickfont=dict(size=12, family="Public Sans"),
+                tickfont=dict(size=14, family="Public Sans", color='black', weight='bold'),
                 showline=False 
             ),
+            # Matplotlib Title (using aggressive font sizing/weight for visual match)
             title={
                 'text': 'Proportion of Grant Amounts by Year', 
-                'font': {'size': 14, 'weight': 'bold', 'family': 'Public Sans'},
+                'font': {'size': 20, 'weight': 'bold', 'family': 'Arial, sans-serif'}, # Match image font style
                 'y':0.95, 'x':0.5, 'xanchor': 'center', 'yanchor': 'top',
                 'pad': {'b': 20} 
             },
+            # Legend styling: positioned outside, large font, custom markers
             legend=dict(
                 orientation="v",
                 yanchor="middle",
                 y=0.5,
                 xanchor="left",
                 x=1.05, 
-                font=dict(size=18, family="Public Sans"),
+                font=dict(size=16, family="Arial, sans-serif", color='black'),
                 traceorder="normal",
                 bgcolor='rgba(0,0,0,0)', 
+                
+                # --- FORCED CIRCLE MARKERS ---
+                itemsizing='trace',
+                marker=dict(size=14) # Use a size similar to the image
             ),
             margin=dict(l=20, r=200, t=60, b=20),
             plot_bgcolor='white', 
@@ -196,6 +209,13 @@ def create_styled_proportional_bar_chart(data, x_col, color_col):
             # Disable all interactive tools
             modebar_remove=['zoom', 'pan', 'select', 'lasso', 'autoscale', 'reset', 'toimage', 'hovercompare', 'togglehover']
         )
+        
+        # --- Final touch: Update trace markers to be circles in the legend ---
+        # This is a common workaround for Plotly legends
+        for trace in fig.data:
+            trace.legendgroup = trace.name
+            trace.showlegend = True
+            trace.marker.symbol = 'circle' # Force circle marker
 
         fig.update_xaxes(showline=False)
         fig.update_yaxes(showline=False)
@@ -212,7 +232,9 @@ def get_svg_download_link(fig, filename="chart.svg"):
     """Generates an HTML download link for the SVG file using base64 encoding."""
     buffer = BytesIO()
     try:
-        fig.write_image(buffer, format="svg", width=1400, height=800) 
+        # Requires the 'kaleido' library
+        # Ensure the exported SVG respects the large size for quality
+        fig.write_image(buffer, format="svg", width=1400, height=800, scale=1) 
     except ValueError as e:
         st.error("Error generating SVG. Please ensure you have the 'kaleido' library installed: `pip install kaleido`")
         return None
@@ -223,10 +245,10 @@ def get_svg_download_link(fig, filename="chart.svg"):
     return href
 
 
-# --- Main App Logic ---
+# --- Main App Logic (Streamlined UI, ALL Dashboard features removed) ---
 def main():
-    st.title("📊 Proportional Stacked Bar Chart Tool (Dynamic Style)")
-    st.markdown("This tool applies the fixed purple Matplotlib style to the first two categories found in your selected splitting column.")
+    st.title("📊 Proportional Stacked Bar Chart Tool (SVG Replica)")
+    st.markdown("Generates a static chart matching the provided design exactly, ready for SVG download.")
 
     # 1. File Uploader
     uploaded_file = st.file_uploader(
@@ -249,36 +271,35 @@ def main():
         st.warning("The dataset contains no suitable columns for categorical grouping.")
         return
 
-    # 2. Controls 
-    with st.container():
-        st.header("Chart Configuration")
-        col1, col2 = st.columns(2)
-        
-        # Select X-axis Category (main grouping)
-        with col1:
-            selected_x_col = st.selectbox(
-                "1. Select **X-Axis Category** (Main Bar Grouping)",
-                options=categorical_cols,
-                index=0 if categorical_cols else None
-            )
-        
-        # Select Splitting/Color Category
-        with col2:
-            color_options = [col for col in categorical_cols if col != selected_x_col]
-            selected_color_col = st.selectbox(
-                "2. Select **Splitting Category** (Bar Stacking/Color)",
-                options=color_options,
-                index=0 if color_options else None
-            )
-        
-        st.caption(f"The chart aggregates by **Count** and applies the fixed purple style based on the **order** of the first two categories it finds in the splitting column.")
+    # 2. Controls (Clean UI, NO SIDEBAR/dashboard components)
+    st.header("Chart Configuration")
+    col1, col2 = st.columns(2)
+    
+    # Select X-axis Category (main grouping)
+    with col1:
+        selected_x_col = st.selectbox(
+            "1. Select **X-Axis Category** (Main Bar Grouping)",
+            options=categorical_cols,
+            index=0 if categorical_cols else None
+        )
+    
+    # Select Splitting/Color Category
+    with col2:
+        color_options = [col for col in categorical_cols if col != selected_x_col]
+        selected_color_col = st.selectbox(
+            "2. Select **Splitting Category** (Bar Stacking/Color)",
+            options=color_options,
+            index=0 if color_options else None
+        )
+    
+    st.caption(f"The chart aggregates by **Count** and uses the first two categories found for styling.")
 
     # 3. Generate and Display Chart
     st.markdown("---")
     
     if all([selected_x_col, selected_color_col]):
         
-        with st.spinner("Generating highly-styled chart..."):
+        with st.spinner("Generating perfect chart replica..."):
             fig = create_styled_proportional_bar_chart(
                 df.copy(), 
                 selected_x_col, 
@@ -293,14 +314,6 @@ def main():
             download_link = get_svg_download_link(fig, filename=f"proportional_count_chart_{selected_x_col}.svg")
             if download_link:
                 st.markdown(download_link, unsafe_allow_html=True)
-            
-            st.markdown(
-                """
-                **Current Styling Map:**
-                * **First Category Found** (e.g., 'False', 'A'): Applies **Pipeline** style (Light Purple, Black Text, 'Pipeline scaleups' label).
-                * **Second Category Found** (e.g., 'True', 'B'): Applies **Primary** style (Dark Purple, Light Gray Text, 'Primary scaleups' label).
-                """
-            )
 
     else:
         st.info("Please select the required X-Axis and Splitting category to generate the chart.")
