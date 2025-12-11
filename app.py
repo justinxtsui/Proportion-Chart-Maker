@@ -12,10 +12,20 @@ st.set_page_config(
     initial_sidebar_state="auto"
 )
 
-# Define the custom colors from the original Matplotlib script
-CUSTOM_COLORS = {
-    'Pipeline': '#EDD9E4',  # Light purple
-    'Primary': '#6F2A58'    # Dark purple
+# Define the custom styles tied to the Matplotlib code's two categories
+STYLED_CATEGORIES = {
+    # This style will be applied to the first category found in the splitting column
+    'CATEGORY_1': {
+        'color': '#EDD9E4', 
+        'text_color': 'black',
+        'label': 'Pipeline scaleups'
+    },
+    # This style will be applied to the second category found
+    'CATEGORY_2': {
+        'color': '#6F2A58', 
+        'text_color': '#D3D3D3', # Light gray
+        'label': 'Primary scaleups'
+    }
 }
 
 # --- Data Loading Function ---
@@ -41,10 +51,11 @@ def load_data(uploaded_file):
         return pd.DataFrame()
 
 
-# --- Visualization Function (Matches Matplotlib Design & Static) ---
+# --- Visualization Function (Dynamic Category Mapping) ---
 def create_styled_proportional_bar_chart(data, x_col, color_col):
     """
-    Creates a Plotly proportional stacked bar chart, rigorously matching the Matplotlib design.
+    Creates a Plotly proportional stacked bar chart, dynamically mapping the first two categories
+    in color_col to the fixed Matplotlib styles.
     """
     if data.empty or x_col is None or color_col is None:
         return None
@@ -61,28 +72,35 @@ def create_styled_proportional_bar_chart(data, x_col, color_col):
         total_by_x = summary_df.groupby(x_col)['Aggregated Value'].transform('sum')
         summary_df['Proportion'] = (summary_df['Aggregated Value'] / total_by_x) * 100
         
-        # 2. Create the Plotly Figure object
+        # 2. Dynamic Style Mapping
+        unique_categories = summary_df[color_col].astype(str).unique()
+        
+        # Ensure categories are sorted consistently for repeatable results
+        unique_categories.sort() 
+        
+        if len(unique_categories) < 2:
+            st.warning("The selected splitting column must contain at least two unique values for a proportional stacked chart.")
+            return None
+
+        # Map the found categories to the fixed styles
+        category_map = {}
+        style_list = list(STYLED_CATEGORIES.values())
+        
+        for i, cat_name in enumerate(unique_categories[:2]):
+            category_map[cat_name] = style_list[i]
+        
+        # 3. Create the Plotly Figure object
         fig = go.Figure()
         
-        # --- Define categories in a fixed, required order ---
-        # NOTE: This assumes the categories, when sorted, are plotted in this order, 
-        # or we iterate through the colors directly.
-        
-        # Check if the required keys are present, and use them first
-        required_categories = list(CUSTOM_COLORS.keys())
-        
-        ordered_categories = [cat for cat in required_categories if cat in summary_df[color_col].unique()]
-        # Add any other categories for robustness, although they won't have custom colors
-        for cat in summary_df[color_col].unique():
-            if cat not in ordered_categories:
-                ordered_categories.append(cat)
+        # We only iterate over the categories we mapped (the first two)
+        ordered_categories = list(category_map.keys())
 
         current_bottom = pd.Series([0.0] * summary_df[x_col].nunique(), 
                                     index=summary_df[x_col].unique()).sort_index()
 
         # --- Add Traces and Data Labels ---
         for category in ordered_categories:
-            cat_data = summary_df[summary_df[color_col] == category].copy()
+            cat_data = summary_df[summary_df[color_col].astype(str) == category].copy()
             
             x_template = pd.DataFrame(index=current_bottom.index)
             cat_data = cat_data.set_index(x_col)
@@ -97,23 +115,12 @@ def create_styled_proportional_bar_chart(data, x_col, color_col):
             
             cat_data['Top'] = cat_data['Bottom'] + cat_data['Proportion']
             
-            # --- Styling Logic Matching Matplotlib ---
-            category_str = str(category)
+            # --- Apply Dynamic Style Map ---
+            style = category_map[category]
             
-            # Use fixed colors/text colors for the two defined categories
-            if category_str == 'Pipeline':
-                marker_color = CUSTOM_COLORS['Pipeline'] # #EDD9E4
-                text_color = 'black'
-                plot_name = 'Pipeline scaleups'
-            elif category_str == 'Primary':
-                marker_color = CUSTOM_COLORS['Primary'] # #6F2A58
-                text_color = '#D3D3D3' # Light gray
-                plot_name = 'Primary scaleups'
-            else:
-                # Default for unexpected categories (should not happen for the original data)
-                marker_color = '#A9A9A9'
-                text_color = 'black'
-                plot_name = category_str
+            marker_color = style['color']
+            text_color = style['text_color']
+            plot_name = style['label'] 
             
             # Add Bar Trace
             fig.add_trace(go.Bar(
@@ -148,7 +155,7 @@ def create_styled_proportional_bar_chart(data, x_col, color_col):
             
             current_bottom = cat_data.set_index(x_col)['Top']
         
-        # 3. Apply Global Styling (Spines, Ticks, Legend, Title)
+        # 4. Apply Global Styling (Fixed Matplotlib Replica)
         
         fig.update_layout(
             barmode='stack',
@@ -172,7 +179,6 @@ def create_styled_proportional_bar_chart(data, x_col, color_col):
                 'y':0.95, 'x':0.5, 'xanchor': 'center', 'yanchor': 'top',
                 'pad': {'b': 20} 
             },
-            # Legend styling: fixed labels and colors based on Matplotlib design
             legend=dict(
                 orientation="v",
                 yanchor="middle",
@@ -182,15 +188,6 @@ def create_styled_proportional_bar_chart(data, x_col, color_col):
                 font=dict(size=18, family="Public Sans"),
                 traceorder="normal",
                 bgcolor='rgba(0,0,0,0)', 
-                
-                # --- Force custom legend structure ---
-                # NOTE: This overrides the trace names if they don't match, 
-                # but ensures the legend always looks correct.
-                # However, since we define trace names above, let's trust the traces, 
-                # but ensure markers are correct.
-                
-                # Forcing custom markers (circles) is not clean in Plotly layouts. 
-                # We will rely on the trace colors and font size/position.
             ),
             margin=dict(l=20, r=200, t=60, b=20),
             plot_bgcolor='white', 
@@ -228,8 +225,8 @@ def get_svg_download_link(fig, filename="chart.svg"):
 
 # --- Main App Logic ---
 def main():
-    st.title("📊 Proportional Stacked Bar Chart Tool (Static Replica)")
-    st.markdown("This tool generates a chart with the exact design specifications for high-quality SVG export.")
+    st.title("📊 Proportional Stacked Bar Chart Tool (Dynamic Style)")
+    st.markdown("This tool applies the fixed purple Matplotlib style to the first two categories found in your selected splitting column.")
 
     # 1. File Uploader
     uploaded_file = st.file_uploader(
@@ -274,19 +271,12 @@ def main():
                 index=0 if color_options else None
             )
         
-        st.caption(f"The chart will automatically aggregate by the **Count** of records.")
+        st.caption(f"The chart aggregates by **Count** and applies the fixed purple style based on the **order** of the first two categories it finds in the splitting column.")
 
     # 3. Generate and Display Chart
     st.markdown("---")
     
     if all([selected_x_col, selected_color_col]):
-        
-        # Check if the required categories are present in the chosen column
-        if not all(cat in df[selected_color_col].astype(str).unique() for cat in CUSTOM_COLORS.keys()):
-            st.warning(
-                f"The column **'{selected_color_col}'** does not contain both 'Pipeline' and 'Primary' values. "
-                f"The colors and legend labels might be incorrect. Found values: {df[selected_color_col].astype(str).unique()}"
-            )
         
         with st.spinner("Generating highly-styled chart..."):
             fig = create_styled_proportional_bar_chart(
@@ -303,6 +293,14 @@ def main():
             download_link = get_svg_download_link(fig, filename=f"proportional_count_chart_{selected_x_col}.svg")
             if download_link:
                 st.markdown(download_link, unsafe_allow_html=True)
+            
+            st.markdown(
+                """
+                **Current Styling Map:**
+                * **First Category Found** (e.g., 'False', 'A'): Applies **Pipeline** style (Light Purple, Black Text, 'Pipeline scaleups' label).
+                * **Second Category Found** (e.g., 'True', 'B'): Applies **Primary** style (Dark Purple, Light Gray Text, 'Primary scaleups' label).
+                """
+            )
 
     else:
         st.info("Please select the required X-Axis and Splitting category to generate the chart.")
