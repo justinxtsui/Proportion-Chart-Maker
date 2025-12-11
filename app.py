@@ -31,7 +31,6 @@ STYLED_CATEGORIES = {
 # --- Font Injection Function ---
 def inject_public_sans_font():
     """Injects the Google Fonts stylesheet link into the Streamlit app."""
-    # This must be called at the top level of the script.
     st.markdown(
         """
         <style>
@@ -41,10 +40,7 @@ def inject_public_sans_font():
         unsafe_allow_html=True
     )
 
-# >>>>> FIX: CALL THE INJECTION FUNCTION HERE <<<<<
-inject_public_sans_font()
-
-# --- Data Loading Function ---
+# --- Data Loading Function (No change) ---
 @st.cache_data
 def load_data(uploaded_file):
     """Loads data from an uploaded CSV or Excel file."""
@@ -67,11 +63,11 @@ def load_data(uploaded_file):
         return pd.DataFrame()
 
 
-# --- Visualization Function (No functional changes) ---
+# --- Visualization Function (Final Stable Version) ---
 def create_styled_proportional_bar_chart(data, x_col, color_col):
     """
     Creates a Plotly proportional stacked bar chart, maximizing stability and
-    strictly disabling interactivity while enforcing Public Sans.
+    strictly disabling interactivity while enforcing Public Sans and minimal axis styling.
     """
     if data.empty or x_col is None or color_col is None:
         return None
@@ -184,11 +180,25 @@ def create_styled_proportional_bar_chart(data, x_col, color_col):
             ),
             bargap=0.3, 
             
+            # --- X-AXIS FINAL FIXES: No Line, No Bold ---
             xaxis=dict(
                 showgrid=False,
-                tickfont=dict(size=14, family="Public Sans, sans-serif", color='black', weight='bold'),
-                showline=False 
+                tickfont=dict(
+                    size=14, 
+                    family="Public Sans, sans-serif", 
+                    color='black', 
+                    weight='normal' # FIX: Removed boldness
+                ),
+                showline=False, # Primary way to hide line
+                zeroline=False, # Secondary way to hide line at zero
+                ticks='', # Ensure no ticks are visible
+                # Ensure maximum removal by forcing the line to be invisible if it persists
+                linecolor='rgba(0,0,0,0)', 
+                linewidth=0, 
+                automargin=True
             ),
+            # --- END X-AXIS FIXES ---
+
             title={
                 'text': 'Proportion of Grant Amounts by Year', 
                 'font': {'size': 20, 'weight': 'bold', 'family': "Public Sans, sans-serif"}, 
@@ -215,8 +225,9 @@ def create_styled_proportional_bar_chart(data, x_col, color_col):
             dragmode=False 
         )
         
-        fig.update_xaxes(showline=False)
-        fig.update_yaxes(showline=False)
+        # Also remove lines via update_xaxes for robustness
+        fig.update_xaxes(showline=False, zeroline=False)
+        fig.update_yaxes(showline=False, zeroline=False)
         
         return fig
 
@@ -242,6 +253,8 @@ def get_svg_download_link(fig, filename="chart.svg"):
 
 
 # --- Main App Logic (Final) ---
+inject_public_sans_font()
+
 def main():
     st.title("📊 Proportional Stacked Bar Chart Tool (SVG Replica)")
     st.markdown("Generates a static chart matching the provided design exactly, ready for SVG download.")
