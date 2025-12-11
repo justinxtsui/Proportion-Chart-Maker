@@ -13,9 +13,10 @@ st.set_page_config(
 )
 
 # Define the custom colors from the original Matplotlib script
+# Colors: #EDD9E4 (Pipeline, Light) and #6F2A58 (Primary, Dark)
 CUSTOM_COLORS = {
-    'Pipeline': '#EDD9E4',  # Light color for Pipeline
-    'Primary': '#6F2A58'    # Dark color for Primary
+    'Pipeline': '#EDD9E4',  
+    'Primary': '#6F2A58'    
 }
 
 # --- Data Loading Function ---
@@ -42,12 +43,10 @@ def load_data(uploaded_file):
         return pd.DataFrame()
 
 
-# --- Visualization Function (Corrected and Customized for Proportional Stacked Bars) ---
+# --- Visualization Function (Matches Matplotlib Design) ---
 def create_styled_proportional_bar_chart(data, x_col, color_col):
     """
-    Creates a Plotly proportional stacked bar chart based ONLY on count,
-    with all custom styling and index/type handling fixes applied.
-    Returns the Plotly figure object.
+    Creates a Plotly proportional stacked bar chart, rigorously matching the Matplotlib design.
     """
     if data.empty or x_col is None or color_col is None:
         return None
@@ -77,7 +76,6 @@ def create_styled_proportional_bar_chart(data, x_col, color_col):
             if cat not in ordered_categories:
                 ordered_categories.append(cat)
                 
-        # Initialize the baseline for stacking, indexed by the X-axis categories
         current_bottom = pd.Series([0.0] * summary_df[x_col].nunique(), 
                                     index=summary_df[x_col].unique()).sort_index()
 
@@ -85,51 +83,45 @@ def create_styled_proportional_bar_chart(data, x_col, color_col):
         for category in ordered_categories:
             cat_data = summary_df[summary_df[color_col] == category].copy()
             
-            # --- Type Fix and Index Handling ---
-            
-            # 1. Create a template for all X-axis values
             x_template = pd.DataFrame(index=current_bottom.index)
             cat_data = cat_data.set_index(x_col)
             
-            # 2. Reindex (merge) to fill missing bars with NaNs
             cat_data = x_template.merge(cat_data, left_index=True, right_index=True, how='left')
             cat_data.reset_index(inplace=True)
             cat_data.rename(columns={'index': x_col}, inplace=True) 
             
-            # 3. Align the bottom position
             cat_data['Bottom'] = current_bottom.reset_index(drop=True)
             
-            # 4. Fill NaNs in numerical columns
             cat_data[['Aggregated Value', 'Proportion']] = cat_data[['Aggregated Value', 'Proportion']].fillna(0)
             
             cat_data['Top'] = cat_data['Bottom'] + cat_data['Proportion']
             
-            # --- FIX: Ensure 'category' is a string before using it in Plotly property ---
+            # --- Styling Logic Matching Matplotlib ---
             category_str = str(category)
             
-            # Determine color and text color based on CUSTOM_COLORS keys
+            # Matplotlib Colors & Labels
             marker_color = CUSTOM_COLORS.get(category_str, '#A9A9A9')
-            text_color = 'black' if category_str == 'Pipeline' else '#D3D3D3'
+            # Black for Pipeline, Light Gray for Primary
+            text_color = 'black' if category_str == 'Pipeline' else '#D3D3D3' 
+            plot_name = f'{category_str} scaleups' # Uses the 'scaleups' suffix as in Matplotlib
             
-            # Define the plot name
-            plot_name = f'{category_str} scaleups' if category_str in CUSTOM_COLORS else category_str
-
             # Add Bar Trace
             fig.add_trace(go.Bar(
                 x=cat_data[x_col],
                 y=cat_data['Proportion'],
-                name=plot_name, # Now guaranteed to be a string
+                name=plot_name,
                 marker_color=marker_color,
                 base=cat_data['Bottom'],
                 customdata=cat_data[['Proportion']],
+                # Set bar width to match Matplotlib's bar_width = 0.6
+                width=0.6,
                 hovertemplate=f"{x_col}: %{{x}}<br>{category_str}: %{{customdata[0]:.1f}}%<extra></extra>"
             ))
-            # --- END FIX ---
 
             # Add Data Labels (Percentage inside bars)
             for i, row in cat_data.iterrows():
                 proportion = row['Proportion']
-                if proportion > 5:
+                if proportion > 5: # Only display label if segment is large enough
                     y_position = row['Bottom'] + (proportion / 2)
                     fig.add_annotation(
                         x=row[x_col],
@@ -139,55 +131,57 @@ def create_styled_proportional_bar_chart(data, x_col, color_col):
                         font=dict(
                             family="Public Sans",
                             size=12,
-                            color=text_color,
+                            color=text_color, # Use the derived text color
                             weight='bold'
                         ),
                         xanchor='center',
                         yanchor='middle'
                     )
             
-            # Update current bottom
             current_bottom = cat_data.set_index(x_col)['Top']
         
-        # 3. Apply Styling (Matplotlib Replica)
+        # 3. Apply Global Styling (Spines, Ticks, Legend, Title)
         
         fig.update_layout(
             barmode='stack',
             xaxis_title=None,
             yaxis_title=None,
+            # Matplotlib: Set y-axis 0-100, remove labels/ticks/spines
             yaxis=dict(
                 range=[0, 100], 
                 showgrid=False,
                 showticklabels=False,
+                showline=False, # Remove Y-axis spine
                 fixedrange=True,
             ),
+            # Matplotlib: Remove x-axis ticks/spines
             xaxis=dict(
                 showgrid=False,
                 tickfont=dict(size=12, family="Public Sans"),
-                showline=False 
+                showline=False # Remove X-axis spine
             ),
+            # Matplotlib Title
             title={
-                'text': 'Proportion of Counts by Category',
+                'text': 'Proportion of Grant Amounts by Year', # Retain original title text
                 'font': {'size': 14, 'weight': 'bold', 'family': 'Public Sans'},
-                'y':0.95, 'x':0.5, 'xanchor': 'center', 'yanchor': 'top'
+                'y':0.95, 'x':0.5, 'xanchor': 'center', 'yanchor': 'top',
+                'pad': {'b': 20} # Simulate Matplotlib's pad=20
             },
+            # Matplotlib Legend (loc='center left', bbox_to_anchor=(1, 0.5), fontsize=18, frameon=False)
             legend=dict(
                 orientation="v",
                 yanchor="middle",
                 y=0.5,
                 xanchor="left",
-                x=1.05, 
+                x=1.05, # Position outside the plot
                 font=dict(size=18, family="Public Sans"),
                 traceorder="normal",
-                bgcolor='rgba(0,0,0,0)',
+                bgcolor='rgba(0,0,0,0)', # frameon=False
             ),
             margin=dict(l=20, r=200, t=60, b=20),
-            plot_bgcolor='white',
+            plot_bgcolor='white', # Remove grid/background
             paper_bgcolor='white',
         )
-
-        fig.update_xaxes(showline=False)
-        fig.update_yaxes(showline=False)
         
         return fig
 
@@ -215,8 +209,8 @@ def get_svg_download_link(fig, filename="chart.svg"):
 
 # --- Main App Logic ---
 def main():
-    st.title("📊 Proportional Stacked Bar Chart Tool (Count-Based)")
-    st.markdown("Upload your data and select the categories to create a $100\%$ proportional chart based on the **count** of records.")
+    st.title("📊 Proportional Stacked Bar Chart Tool (Style Replica)")
+    st.markdown("This tool generates a chart styled to match the original Matplotlib code, using counts for proportionality.")
 
     # 1. File Uploader
     uploaded_file = st.file_uploader(
@@ -284,7 +278,7 @@ def main():
             if download_link:
                 st.markdown(download_link, unsafe_allow_html=True)
             
-            st.caption("Note: Custom colors and percentage labels for 'Pipeline' and 'Primary' require those exact string category names in the splitting column.")
+            st.caption("Custom colors, legend labels ('... scaleups'), and text colors are fixed to the Matplotlib code. They work best if the splitting column contains 'Pipeline' and 'Primary'.")
 
     else:
         st.info("Please select the required X-Axis and Splitting category to generate the chart.")
