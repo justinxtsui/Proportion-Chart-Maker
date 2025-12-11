@@ -1,19 +1,18 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
 import plotly.graph_objects as go
 import numpy as np
+from io import StringIO, BytesIO
+import base64
 
 # --- Configuration and Setup ---
 st.set_page_config(
-    page_title="Dynamic Data Analysis Dashboard",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    page_title="Proportional Chart Maker",
+    layout="centered", # Changed layout for a simple tool, not a dashboard
+    initial_sidebar_state="auto"
 )
 
 # Define the custom colors from the original Matplotlib script
-# NOTE: The categories in the 'Splitting Category' must match these keys ('Pipeline', 'Primary') 
-# for the custom colors and text colors to work correctly.
 CUSTOM_COLORS = {
     'Pipeline': '#EDD9E4',  # Light color for Pipeline
     'Primary': '#6F2A58'    # Dark color for Primary
@@ -45,11 +44,11 @@ def load_data(uploaded_file):
 # --- Visualization Function (Corrected and Customized for Proportional Stacked Bars) ---
 def create_styled_proportional_bar_chart(data, x_col, color_col, agg_col, agg_func):
     """
-    Creates a Plotly proportional stacked bar chart, mimicking the original design
-    and ensuring the proportional logic is correctly applied (sum to 100%).
+    Creates a Plotly proportional stacked bar chart, mimicking the original design.
+    Returns the Plotly figure object.
     """
     if data.empty or x_col is None or color_col is None or agg_col is None:
-        return
+        return None
 
     # 1. Prepare Data for Proportional Plot
     data[agg_col] = pd.to_numeric(data[agg_col], errors='coerce')
@@ -57,28 +56,26 @@ def create_styled_proportional_bar_chart(data, x_col, color_col, agg_col, agg_fu
     
     if data.empty:
         st.warning(f"No valid data remaining after filtering for non-null values.")
-        return
+        return None
 
     try:
         # Group and aggregate
         summary_df = data.groupby([x_col, color_col]).agg({agg_col: agg_func}).reset_index()
         summary_df.columns = [x_col, color_col, 'Aggregated Value']
         
-        # Calculate Proportions (Essential for the requested look: always 0-100%)
+        # Calculate Proportions
         total_by_x = summary_df.groupby(x_col)['Aggregated Value'].transform('sum')
         summary_df['Proportion'] = (summary_df['Aggregated Value'] / total_by_x) * 100
         
         # 2. Create the Plotly Figure object
         fig = go.Figure()
         
-        # Ensure a defined order for stacking and colors. Use keys from CUSTOM_COLORS if possible.
         ordered_categories = [cat for cat in CUSTOM_COLORS.keys() if cat in summary_df[color_col].unique()]
-        # Add any other categories found in the data, just in case
         for cat in summary_df[color_col].unique():
             if cat not in ordered_categories:
                 ordered_categories.append(cat)
                 
-        # Initialize the baseline for stacking
+        # Initialize the baseline for stacking, indexed by the X-axis categories
         current_bottom = pd.Series([0.0] * summary_df[x_col].nunique(), 
                                     index=summary_df[x_col].unique()).sort_index()
 
@@ -86,26 +83,34 @@ def create_styled_proportional_bar_chart(data, x_col, color_col, agg_col, agg_fu
         for category in ordered_categories:
             cat_data = summary_df[summary_df[color_col] == category].copy()
             
-            # Reindex to ensure all X categories are present, which introduces NaNs
-            cat_data = cat_data.set_index(x_col).reindex(current_bottom.index).reset_index()
-            cat_data['Bottom'] = current_bottom
+            # --- FIX: Ensure X-axis categories are handled when reindexing ---
+            # Create a DataFrame template for the X-axis values to use for reindexing
+            x_template = pd.DataFrame(index=current_bottom.index)
+            cat_data = cat_data.set_index(x_col)
             
-            # --- FIX: Only fill numerical columns to avoid TypeError ---
-            numerical_cols_to_fill = ['Aggregated Value', 'Proportion', 'Bottom']
-            cat_data[numerical_cols_to_fill] = cat_data[numerical_cols_to_fill].fillna(0)
+            # Reindex cat_data based on the X-axis template, introducing NaNs where data is missing
+            cat_data = x_template.merge(cat_data, left_index=True, right_index=True, how='left')
+            cat_data.reset_index(inplace=True)
+            cat_data.rename(columns={'index': x_col}, inplace=True) # Restore x_col name
             # --- END FIX ---
+            
+            cat_data['Bottom'] = current_bottom.reset_index(drop=True)
+            
+            # Only fill the numerical columns for new NaNs (Proportion, Aggregated Value)
+            numerical_cols_to_fill = ['Aggregated Value', 'Proportion']
+            cat_data[numerical_cols_to_fill] = cat_data[numerical_cols_to_fill].fillna(0)
             
             cat_data['Top'] = cat_data['Bottom'] + cat_data['Proportion']
             
-            # Determine color and text color based on category name
-            marker_color = CUSTOM_COLORS.get(category, '#A9A9A9') # Default to Dark Gray
-            text_color = 'black' if category == 'Pipeline' else '#D3D3D3' # Light gray
+            # Determine color and text color
+            marker_color = CUSTOM_COLORS.get(category, '#A9A9A9')
+            text_color = 'black' if category == 'Pipeline' else '#D3D3D3'
             
             # Add Bar Trace
             fig.add_trace(go.Bar(
-                x=cat_data[x_col],
+                x=cat_data[x_col], # This now works because x_col was restored
                 y=cat_data['Proportion'],
-                name=f'{category} scaleups' if category in CUSTOM_COLORS else category, # Match original legend
+                name=f'{category} scaleups' if category in CUSTOM_COLORS else category,
                 marker_color=marker_color,
                 base=cat_data['Bottom'],
                 customdata=cat_data[['Proportion']],
@@ -115,7 +120,7 @@ def create_styled_proportional_bar_chart(data, x_col, color_col, agg_col, agg_fu
             # Add Data Labels (Percentage inside bars)
             for i, row in cat_data.iterrows():
                 proportion = row['Proportion']
-                if proportion > 5: # Only label if proportion is large enough
+                if proportion > 5:
                     y_position = row['Bottom'] + (proportion / 2)
                     fig.add_annotation(
                         x=row[x_col],
@@ -145,7 +150,7 @@ def create_styled_proportional_bar_chart(data, x_col, color_col, agg_col, agg_fu
                 range=[0, 100], 
                 showgrid=False,
                 showticklabels=False,
-                fixedrange=True, # Prevent user from zooming on Y-axis
+                fixedrange=True,
             ),
             xaxis=dict(
                 showgrid=False,
@@ -153,7 +158,7 @@ def create_styled_proportional_bar_chart(data, x_col, color_col, agg_col, agg_fu
                 showline=False 
             ),
             title={
-                'text': f'Proportion of {agg_col} by {x_col}', # Dynamic title update
+                'text': 'Proportion of Grant Amounts by Year', # Revert to original title for style
                 'font': {'size': 14, 'weight': 'bold', 'family': 'Public Sans'},
                 'y':0.95, 'x':0.5, 'xanchor': 'center', 'yanchor': 'top'
             },
@@ -175,21 +180,45 @@ def create_styled_proportional_bar_chart(data, x_col, color_col, agg_col, agg_fu
         fig.update_xaxes(showline=False)
         fig.update_yaxes(showline=False)
         
-        st.plotly_chart(fig, use_container_width=True)
+        return fig
 
     except Exception as e:
         st.error(f"An error occurred during chart generation: {e}")
         st.exception(e)
+        return None
+
+# --- Download SVG Function ---
+# This helper creates a download link for the SVG file
+def get_svg_download_link(fig, filename="chart.svg"):
+    # Plotly figures can export to SVG using fig.write_image, but Streamlit requires a workaround
+    # This function uses a BytesIO buffer and base64 encoding to create a downloadable link
+    
+    # We need to ensure kaleido is installed for write_image to work in deployment environments
+    # For local testing, you might need to install 'pip install kaleido'
+    
+    buffer = BytesIO()
+    # Write the figure to the buffer as SVG
+    try:
+        fig.write_image(buffer, format="svg", width=1400, height=800) # Use desired size for SVG
+    except ValueError as e:
+        st.error("Error generating SVG. Please ensure you have the 'kaleido' library installed: `pip install kaleido`")
+        return None
+
+    # Encode the buffer content in base64
+    b64 = base64.b64encode(buffer.getvalue()).decode()
+    
+    # Create the download link
+    href = f'<a href="data:image/svg+xml;base64,{b64}" download="{filename}">Download SVG Chart</a>'
+    return href
 
 
 # --- Main App Logic ---
 def main():
-    st.title("💰 IUK Grant Style Analysis Dashboard")
-    st.markdown("Upload your data file and use the sidebar to configure the visualization.")
+    st.title("📊 Proportional Stacked Bar Chart Tool")
+    st.markdown("Upload your data and configure the chart to generate a styled proportional bar visualization.")
 
-    # 1. File Uploader in Sidebar
-    st.sidebar.header("📥 Data Upload")
-    uploaded_file = st.sidebar.file_uploader(
+    # 1. File Uploader
+    uploaded_file = st.file_uploader(
         "Upload your CSV or Excel file",
         type=['csv', 'xlsx', 'xls']
     )
@@ -199,7 +228,7 @@ def main():
         df = load_data(uploaded_file)
 
     if df.empty:
-        st.warning("Please upload a file to proceed.")
+        st.info("Please upload a file to proceed.")
         return
 
     # Identify column types
@@ -207,81 +236,87 @@ def main():
     numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
     
     if not categorical_cols:
-        st.warning("The dataset contains no suitable columns for categorical grouping (X-Axis or Split).")
+        st.warning("The dataset contains no suitable columns for categorical grouping.")
         return
 
-    # 2. Sidebar for User Selections
-    st.sidebar.header("🛠️ Chart Controls")
-    
-    # Select X-axis Category (main grouping)
-    selected_x_col = st.sidebar.selectbox(
-        "Select **X-Axis Category** (Main Bar Grouping)",
-        options=categorical_cols,
-        index=0 if categorical_cols else None
-    )
-    
-    # Select Splitting/Color Category
-    color_options = [col for col in categorical_cols if col != selected_x_col]
-    selected_color_col = st.sidebar.selectbox(
-        "Select **Splitting Category** (Bar Stacking/Color)",
-        options=color_options,
-        index=0 if color_options else None
-    )
+    # 2. Controls (Moved to main page for simplicity)
+    with st.container():
+        st.header("Chart Configuration")
+        col1, col2, col3 = st.columns(3)
+        
+        # Select X-axis Category (main grouping)
+        with col1:
+            selected_x_col = st.selectbox(
+                "1. Select **X-Axis Category** (Main Bar Grouping)",
+                options=categorical_cols,
+                index=0 if categorical_cols else None
+            )
+        
+        # Select Splitting/Color Category
+        with col2:
+            color_options = [col for col in categorical_cols if col != selected_x_col]
+            selected_color_col = st.selectbox(
+                "2. Select **Splitting Category** (Bar Stacking/Color)",
+                options=color_options,
+                index=0 if color_options else None
+            )
 
-    # Select Aggregation Column (the values being aggregated)
-    selected_agg_col = st.sidebar.selectbox(
-        "Select **Value Column** (The numeric column being aggregated)",
-        options=numeric_cols,
-        index=0 if numeric_cols else None
-    )
+        # Select Aggregation Column and Type
+        with col3:
+            selected_agg_col = st.selectbox(
+                "3. Select **Value Column**",
+                options=numeric_cols,
+                index=0 if numeric_cols else None
+            )
 
-    # Select Aggregation Type
-    aggregation_options = {
-        'Sum of Value': np.sum, 
-        'Count of Records': pd.Series.count
-    }
+            aggregation_options = {
+                'Sum of Value': np.sum, 
+                'Count of Records': pd.Series.count
+            }
+            
+            if selected_agg_col is None:
+                current_agg_options = {'Count of Records': pd.Series.count}
+                selected_agg_label = 'Count of Records'
+                st.caption("Only 'Count of Records' available as no numeric column is selected.")
+            else:
+                current_agg_options = aggregation_options
+                selected_agg_label = st.selectbox(
+                    "4. Select **Aggregation Type**",
+                    options=list(current_agg_options.keys()),
+                    index=0
+                )
+            selected_agg_func = current_agg_options[selected_agg_label]
+
+    # 3. Generate and Display Chart
+    st.markdown("---")
     
-    if selected_agg_col is None:
-        current_agg_options = {'Count of Records': pd.Series.count}
-        selected_agg_label = 'Count of Records'
-        st.sidebar.info("Only 'Count of Records' is available.")
-    else:
-        current_agg_options = aggregation_options
-        selected_agg_label = st.sidebar.selectbox(
-            "Select **Aggregation Type**",
-            options=list(current_agg_options.keys()),
-            index=0
-        )
-    
-    selected_agg_func = current_agg_options[selected_agg_label]
-    
-    # Final check and chart generation
     if all([selected_x_col, selected_color_col]) and (selected_agg_col or selected_agg_label == 'Count of Records'):
         
         final_agg_col = selected_agg_col if selected_agg_col else selected_x_col 
-
-        st.markdown("---")
-        st.info(
-            "The chart below is a **proportional stacked bar chart (0-100%)**. "
-            "The segments in each bar represent the percentage contribution of the "
-            "Splitting Category to the total value/count of the X-Axis Category."
-        )
         
-        with st.container():
-            create_styled_proportional_bar_chart(
+        with st.spinner("Generating highly-styled chart..."):
+            fig = create_styled_proportional_bar_chart(
                 df.copy(), 
                 selected_x_col, 
                 selected_color_col, 
                 final_agg_col, 
                 selected_agg_func
             )
-    else:
-        st.info("Please select the required X-Axis, Splitting category, and a Value column to generate the chart.")
+        
+        if fig:
+            # Display the interactive Plotly chart
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # Create and display the SVG download link
+            download_link = get_svg_download_link(fig, filename=f"proportional_chart_{selected_x_col}.svg")
+            if download_link:
+                st.markdown(download_link, unsafe_allow_html=True)
+            
+            st.caption("Note: Custom colors and percentage labels only work if the splitting column contains 'Pipeline' and 'Primary'.")
 
-    # 4. Display Raw Data (Optional)
-    if st.checkbox('Show Raw Data Table'):
-        st.subheader('Raw Data')
-        st.dataframe(df)
+    else:
+        st.info("Please select all required columns (X-Axis, Splitting category, and a Value column) to generate the chart.")
+
 
 if __name__ == '__main__':
     main()
