@@ -14,23 +14,37 @@ st.set_page_config(
 
 # Define the custom styles tied to the Matplotlib code's two categories
 STYLED_CATEGORIES = {
-    # This style will be applied to the first category found (e.g., False)
     'CATEGORY_1': {
-        'color': '#EDD9E4',        # Light purple
-        'text_color': 'black',     # Black text for light background
-        'suffix': '',              # FIX: Removed ' scaleups'
+        'color': '#EDD9E4',        
+        'text_color': 'black',     
+        'suffix': '',              
         'font_family': 'Public Sans, sans-serif'
     },
-    # This style will be applied to the second category found (e.g., True)
     'CATEGORY_2': {
-        'color': '#6F2A58',        # Dark purple
-        'text_color': '#F0F0F0',   # FIX: Very light gray/off-white for max contrast on dark background
-        'suffix': '',              # FIX: Removed ' scaleups'
+        'color': '#6F2A58',        
+        'text_color': '#F0F0F0',   
+        'suffix': '',              
         'font_family': 'Public Sans, sans-serif'
     }
 }
 
-# --- Data Loading Function (No change) ---
+# --- Font Injection Function ---
+def inject_public_sans_font():
+    """Injects the Google Fonts stylesheet link into the Streamlit app."""
+    # This must be called at the top level of the script.
+    st.markdown(
+        """
+        <style>
+        @import url('https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;700&display=swap');
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+
+# >>>>> FIX: CALL THE INJECTION FUNCTION HERE <<<<<
+inject_public_sans_font()
+
+# --- Data Loading Function ---
 @st.cache_data
 def load_data(uploaded_file):
     """Loads data from an uploaded CSV or Excel file."""
@@ -53,10 +67,11 @@ def load_data(uploaded_file):
         return pd.DataFrame()
 
 
-# --- Visualization Function (Final Stable Version) ---
+# --- Visualization Function (No functional changes) ---
 def create_styled_proportional_bar_chart(data, x_col, color_col):
     """
-    Creates a Plotly proportional stacked bar chart, strictly enforcing final styles.
+    Creates a Plotly proportional stacked bar chart, maximizing stability and
+    strictly disabling interactivity while enforcing Public Sans.
     """
     if data.empty or x_col is None or color_col is None:
         return None
@@ -118,7 +133,6 @@ def create_styled_proportional_bar_chart(data, x_col, color_col):
             
             marker_color = style['color']
             text_color = style['text_color']
-            # FIX: Only use the category name
             plot_name = f'{category}{style["suffix"]}' 
             
             # Add Bar Trace
@@ -181,9 +195,8 @@ def create_styled_proportional_bar_chart(data, x_col, color_col):
                 'y':0.95, 'x':0.5, 'xanchor': 'center', 'yanchor': 'top',
                 'pad': {'b': 20} 
             },
-            # FIX: Legend Heading is the column name
             legend=dict(
-                title=dict(text=color_col), # FIX: Set title to selected column name
+                title=dict(text=color_col), 
                 orientation="v",
                 yanchor="middle",
                 y=0.5,
@@ -230,9 +243,6 @@ def get_svg_download_link(fig, filename="chart.svg"):
 
 # --- Main App Logic (Final) ---
 def main():
-    # Inject font link at the start of the app execution
-    inject_public_sans_font() 
-    
     st.title("📊 Proportional Stacked Bar Chart Tool (SVG Replica)")
     st.markdown("Generates a static chart matching the provided design exactly, ready for SVG download.")
 
