@@ -31,6 +31,7 @@ def load_data(uploaded_file):
             st.error("Unsupported file type. Please upload a CSV or Excel file (.csv, .xlsx, .xls).")
             return pd.DataFrame()
         
+        # Convert object columns to categorical where cardinality is low
         for col in df.select_dtypes(include=['object']).columns:
             if df[col].nunique() < 50:
                 df[col] = df[col].astype('category')
@@ -41,18 +42,15 @@ def load_data(uploaded_file):
         return pd.DataFrame()
 
 
-# --- Visualization Function ---
+# --- Visualization Function (Corrected and Customized for Proportional Stacked Bars) ---
 def create_styled_proportional_bar_chart(data, x_col, color_col):
     """
-    Creates a Plotly proportional stacked bar chart based ONLY on count (agg_func=pd.Series.count).
+    Creates a Plotly proportional stacked bar chart based ONLY on count,
+    with all custom styling and index handling fixes applied.
     Returns the Plotly figure object.
     """
     if data.empty or x_col is None or color_col is None:
         return None
-    
-    # We use x_col as the column to count, as it must be non-null for grouping.
-    agg_col = x_col 
-    agg_func = pd.Series.count
     
     # Drop rows where the grouping columns are null
     data.dropna(subset=[x_col, color_col], inplace=True)
@@ -64,9 +62,9 @@ def create_styled_proportional_bar_chart(data, x_col, color_col):
     try:
         # 1. Prepare Data for Proportional Plot (Based on COUNT)
         
-        # Group and aggregate (Count of records in the group)
-        summary_df = data.groupby([x_col, color_col]).agg({agg_col: agg_func}).reset_index()
-        summary_df.columns = [x_col, color_col, 'Aggregated Value']
+        # FIX: Use .size().reset_index(name=...) to ensure the aggregated column
+        # is uniquely named ('Aggregated Value') and avoid conflicts like 'Beauhurst company URL'.
+        summary_df = data.groupby([x_col, color_col]).size().reset_index(name='Aggregated Value')
         
         # Calculate Proportions
         total_by_x = summary_df.groupby(x_col)['Aggregated Value'].transform('sum')
@@ -75,6 +73,7 @@ def create_styled_proportional_bar_chart(data, x_col, color_col):
         # 2. Create the Plotly Figure object
         fig = go.Figure()
         
+        # Determine the order of categories for consistent stacking and legend
         ordered_categories = [cat for cat in CUSTOM_COLORS.keys() if cat in summary_df[color_col].unique()]
         for cat in summary_df[color_col].unique():
             if cat not in ordered_categories:
@@ -88,22 +87,25 @@ def create_styled_proportional_bar_chart(data, x_col, color_col):
         for category in ordered_categories:
             cat_data = summary_df[summary_df[color_col] == category].copy()
             
-            # --- Handle Reindexing and NaN values (Crucial for correct stacking) ---
+            # 1. Create a template for all X-axis values
             x_template = pd.DataFrame(index=current_bottom.index)
             cat_data = cat_data.set_index(x_col)
             
+            # 2. Reindex (merge) to fill missing bars with NaNs
             cat_data = x_template.merge(cat_data, left_index=True, right_index=True, how='left')
             cat_data.reset_index(inplace=True)
-            cat_data.rename(columns={'index': x_col}, inplace=True) # Restore x_col name
+            # 3. Restore the x_col name which was lost when converting the index to a column
+            cat_data.rename(columns={'index': x_col}, inplace=True) 
             
+            # 4. Align the bottom position with the current X-axis categories
             cat_data['Bottom'] = current_bottom.reset_index(drop=True)
             
-            # Only fill numerical columns (Proportion) with 0
+            # 5. Fill NaNs in numerical columns (Top, Bottom, Proportion) with 0
             cat_data[['Aggregated Value', 'Proportion']] = cat_data[['Aggregated Value', 'Proportion']].fillna(0)
             
             cat_data['Top'] = cat_data['Bottom'] + cat_data['Proportion']
             
-            # Determine color and text color
+            # Determine color and text color based on CUSTOM_COLORS keys
             marker_color = CUSTOM_COLORS.get(category, '#A9A9A9')
             text_color = 'black' if category == 'Pipeline' else '#D3D3D3'
             
@@ -138,10 +140,10 @@ def create_styled_proportional_bar_chart(data, x_col, color_col):
                         yanchor='middle'
                     )
             
-            # Update current bottom for the next stack (FIXED)
+            # FIX: Use the DataFrame to correctly set the index for the 'Top' Series
             current_bottom = cat_data.set_index(x_col)['Top']
         
-        # 3. Apply Styling
+        # 3. Apply Styling (Matplotlib Replica)
         
         fig.update_layout(
             barmode='stack',
@@ -150,7 +152,7 @@ def create_styled_proportional_bar_chart(data, x_col, color_col):
             yaxis=dict(
                 range=[0, 100], 
                 showgrid=False,
-                showticklabels=False,
+                showticklabels=False, # Hide Y-axis labels
                 fixedrange=True,
             ),
             xaxis=dict(
@@ -159,7 +161,7 @@ def create_styled_proportional_bar_chart(data, x_col, color_col):
                 showline=False 
             ),
             title={
-                'text': 'Proportion of Counts by Category', # Generic title
+                'text': 'Proportion of Counts by Category', # Generic Title
                 'font': {'size': 14, 'weight': 'bold', 'family': 'Public Sans'},
                 'y':0.95, 'x':0.5, 'xanchor': 'center', 'yanchor': 'top'
             },
@@ -193,7 +195,7 @@ def get_svg_download_link(fig, filename="chart.svg"):
     """Generates an HTML download link for the SVG file using base64 encoding."""
     buffer = BytesIO()
     try:
-        # Note: Requires the 'kaleido' library
+        # Requires the 'kaleido' library
         fig.write_image(buffer, format="svg", width=1400, height=800) 
     except ValueError as e:
         st.error("Error generating SVG. Please ensure you have the 'kaleido' library installed: `pip install kaleido`")
@@ -231,7 +233,7 @@ def main():
         st.warning("The dataset contains no suitable columns for categorical grouping.")
         return
 
-    # 2. Controls (Streamlined to 2 selections)
+    # 2. Controls 
     with st.container():
         st.header("Chart Configuration")
         col1, col2 = st.columns(2)
