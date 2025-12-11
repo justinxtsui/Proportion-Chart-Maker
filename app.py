@@ -46,7 +46,7 @@ def load_data(uploaded_file):
 def create_styled_proportional_bar_chart(data, x_col, color_col):
     """
     Creates a Plotly proportional stacked bar chart based ONLY on count,
-    with all custom styling and index handling fixes applied.
+    with all custom styling and index/type handling fixes applied.
     Returns the Plotly figure object.
     """
     if data.empty or x_col is None or color_col is None:
@@ -62,8 +62,7 @@ def create_styled_proportional_bar_chart(data, x_col, color_col):
     try:
         # 1. Prepare Data for Proportional Plot (Based on COUNT)
         
-        # FIX: Use .size().reset_index(name=...) to ensure the aggregated column
-        # is uniquely named ('Aggregated Value') and avoid conflicts like 'Beauhurst company URL'.
+        # Use .size().reset_index(name=...) to ensure the aggregated column is uniquely named
         summary_df = data.groupby([x_col, color_col]).size().reset_index(name='Aggregated Value')
         
         # Calculate Proportions
@@ -73,7 +72,6 @@ def create_styled_proportional_bar_chart(data, x_col, color_col):
         # 2. Create the Plotly Figure object
         fig = go.Figure()
         
-        # Determine the order of categories for consistent stacking and legend
         ordered_categories = [cat for cat in CUSTOM_COLORS.keys() if cat in summary_df[color_col].unique()]
         for cat in summary_df[color_col].unique():
             if cat not in ordered_categories:
@@ -87,6 +85,8 @@ def create_styled_proportional_bar_chart(data, x_col, color_col):
         for category in ordered_categories:
             cat_data = summary_df[summary_df[color_col] == category].copy()
             
+            # --- Type Fix and Index Handling ---
+            
             # 1. Create a template for all X-axis values
             x_template = pd.DataFrame(index=current_bottom.index)
             cat_data = cat_data.set_index(x_col)
@@ -94,32 +94,38 @@ def create_styled_proportional_bar_chart(data, x_col, color_col):
             # 2. Reindex (merge) to fill missing bars with NaNs
             cat_data = x_template.merge(cat_data, left_index=True, right_index=True, how='left')
             cat_data.reset_index(inplace=True)
-            # 3. Restore the x_col name which was lost when converting the index to a column
             cat_data.rename(columns={'index': x_col}, inplace=True) 
             
-            # 4. Align the bottom position with the current X-axis categories
+            # 3. Align the bottom position
             cat_data['Bottom'] = current_bottom.reset_index(drop=True)
             
-            # 5. Fill NaNs in numerical columns (Top, Bottom, Proportion) with 0
+            # 4. Fill NaNs in numerical columns
             cat_data[['Aggregated Value', 'Proportion']] = cat_data[['Aggregated Value', 'Proportion']].fillna(0)
             
             cat_data['Top'] = cat_data['Bottom'] + cat_data['Proportion']
             
-            # Determine color and text color based on CUSTOM_COLORS keys
-            marker_color = CUSTOM_COLORS.get(category, '#A9A9A9')
-            text_color = 'black' if category == 'Pipeline' else '#D3D3D3'
+            # --- FIX: Ensure 'category' is a string before using it in Plotly property ---
+            category_str = str(category)
             
+            # Determine color and text color based on CUSTOM_COLORS keys
+            marker_color = CUSTOM_COLORS.get(category_str, '#A9A9A9')
+            text_color = 'black' if category_str == 'Pipeline' else '#D3D3D3'
+            
+            # Define the plot name
+            plot_name = f'{category_str} scaleups' if category_str in CUSTOM_COLORS else category_str
+
             # Add Bar Trace
             fig.add_trace(go.Bar(
                 x=cat_data[x_col],
                 y=cat_data['Proportion'],
-                name=f'{category} scaleups' if category in CUSTOM_COLORS else category,
+                name=plot_name, # Now guaranteed to be a string
                 marker_color=marker_color,
                 base=cat_data['Bottom'],
                 customdata=cat_data[['Proportion']],
-                hovertemplate=f"{x_col}: %{{x}}<br>{category}: %{{customdata[0]:.1f}}%<extra></extra>"
+                hovertemplate=f"{x_col}: %{{x}}<br>{category_str}: %{{customdata[0]:.1f}}%<extra></extra>"
             ))
-            
+            # --- END FIX ---
+
             # Add Data Labels (Percentage inside bars)
             for i, row in cat_data.iterrows():
                 proportion = row['Proportion']
@@ -140,7 +146,7 @@ def create_styled_proportional_bar_chart(data, x_col, color_col):
                         yanchor='middle'
                     )
             
-            # FIX: Use the DataFrame to correctly set the index for the 'Top' Series
+            # Update current bottom
             current_bottom = cat_data.set_index(x_col)['Top']
         
         # 3. Apply Styling (Matplotlib Replica)
@@ -152,7 +158,7 @@ def create_styled_proportional_bar_chart(data, x_col, color_col):
             yaxis=dict(
                 range=[0, 100], 
                 showgrid=False,
-                showticklabels=False, # Hide Y-axis labels
+                showticklabels=False,
                 fixedrange=True,
             ),
             xaxis=dict(
@@ -161,7 +167,7 @@ def create_styled_proportional_bar_chart(data, x_col, color_col):
                 showline=False 
             ),
             title={
-                'text': 'Proportion of Counts by Category', # Generic Title
+                'text': 'Proportion of Counts by Category',
                 'font': {'size': 14, 'weight': 'bold', 'family': 'Public Sans'},
                 'y':0.95, 'x':0.5, 'xanchor': 'center', 'yanchor': 'top'
             },
@@ -278,7 +284,7 @@ def main():
             if download_link:
                 st.markdown(download_link, unsafe_allow_html=True)
             
-            st.caption("Note: Custom colors and percentage labels for 'Pipeline' and 'Primary' require those exact category names in the splitting column.")
+            st.caption("Note: Custom colors and percentage labels for 'Pipeline' and 'Primary' require those exact string category names in the splitting column.")
 
     else:
         st.info("Please select the required X-Axis and Splitting category to generate the chart.")
