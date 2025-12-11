@@ -118,27 +118,32 @@ def create_styled_proportional_bar_chart(data, x_col, color_col):
             text_color = style['text_color']
             plot_name = style['label'] 
             
-            # Add Bar Trace
+            # Add a *HIDDEN SCATTER TRACE* to force a circle marker in the legend
+            fig.add_trace(go.Scatter(
+                x=[None], # Invisible x-data
+                y=[None], # Invisible y-data
+                mode='markers',
+                marker=dict(size=15, color=marker_color, symbol='circle'),
+                name=plot_name,
+                showlegend=True,
+                hoverinfo='skip'
+            ))
+            
+            # Add Bar Trace (The actual data)
             fig.add_trace(go.Bar(
                 x=cat_data[x_col],
                 y=cat_data['Proportion'],
-                name=plot_name,
+                name=plot_name, # Use the same name as the Scatter trace
                 marker_color=marker_color,
                 base=cat_data['Bottom'],
                 width=0.6, 
                 hoverinfo='skip',
-                # Set legend marker to circle (for non-bar trace types)
-                legendgroup=plot_name,
-                showlegend=True 
+                showlegend=False # HIDE the bar trace from the legend
             ))
 
             # Add Data Labels (Percentage inside bars)
             for i, row in cat_data.iterrows():
                 proportion = row['Proportion']
-                # The provided image shows labels for both large and small segments (e.g., 25.4% and 74.6%)
-                # We will keep the > 5% logic but understand the image shows labels for all
-                # if proportion > 5:
-                # Based on the image, the two main segments always show labels. We assume the largest two are visible.
                 if proportion > 0: 
                     y_position = row['Bottom'] + (proportion / 2)
                     fig.add_annotation(
@@ -147,9 +152,8 @@ def create_styled_proportional_bar_chart(data, x_col, color_col):
                         text=f"{proportion:.1f}%",
                         showarrow=False,
                         font=dict(
-                            # Font in image is bolder and potentially larger/different family than Public Sans
                             family="Arial, sans-serif", 
-                            size=14, # Slightly larger for better match
+                            size=14, 
                             color=text_color, 
                             weight='bold'
                         ),
@@ -172,8 +176,7 @@ def create_styled_proportional_bar_chart(data, x_col, color_col):
                 showline=False, 
                 fixedrange=True,
             ),
-            # Increase bar width by reducing the spacing between categories
-            bargap=0.3, # Adjust bar spacing (default is 0.2)
+            bargap=0.3, # For chunky bars
             
             xaxis=dict(
                 showgrid=False,
@@ -183,11 +186,11 @@ def create_styled_proportional_bar_chart(data, x_col, color_col):
             # Matplotlib Title (using aggressive font sizing/weight for visual match)
             title={
                 'text': 'Proportion of Grant Amounts by Year', 
-                'font': {'size': 20, 'weight': 'bold', 'family': 'Arial, sans-serif'}, # Match image font style
+                'font': {'size': 20, 'weight': 'bold', 'family': 'Arial, sans-serif'}, 
                 'y':0.95, 'x':0.5, 'xanchor': 'center', 'yanchor': 'top',
                 'pad': {'b': 20} 
             },
-            # Legend styling: positioned outside, large font, custom markers
+            # Legend styling: fixed position, large font, relies on scatter traces for circle markers
             legend=dict(
                 orientation="v",
                 yanchor="middle",
@@ -197,10 +200,7 @@ def create_styled_proportional_bar_chart(data, x_col, color_col):
                 font=dict(size=16, family="Arial, sans-serif", color='black'),
                 traceorder="normal",
                 bgcolor='rgba(0,0,0,0)', 
-                
-                # --- FORCED CIRCLE MARKERS ---
                 itemsizing='trace',
-                marker=dict(size=14) # Use a size similar to the image
             ),
             margin=dict(l=20, r=200, t=60, b=20),
             plot_bgcolor='white', 
@@ -210,13 +210,6 @@ def create_styled_proportional_bar_chart(data, x_col, color_col):
             modebar_remove=['zoom', 'pan', 'select', 'lasso', 'autoscale', 'reset', 'toimage', 'hovercompare', 'togglehover']
         )
         
-        # --- Final touch: Update trace markers to be circles in the legend ---
-        # This is a common workaround for Plotly legends
-        for trace in fig.data:
-            trace.legendgroup = trace.name
-            trace.showlegend = True
-            trace.marker.symbol = 'circle' # Force circle marker
-
         fig.update_xaxes(showline=False)
         fig.update_yaxes(showline=False)
         
@@ -233,7 +226,6 @@ def get_svg_download_link(fig, filename="chart.svg"):
     buffer = BytesIO()
     try:
         # Requires the 'kaleido' library
-        # Ensure the exported SVG respects the large size for quality
         fig.write_image(buffer, format="svg", width=1400, height=800, scale=1) 
     except ValueError as e:
         st.error("Error generating SVG. Please ensure you have the 'kaleido' library installed: `pip install kaleido`")
@@ -245,7 +237,7 @@ def get_svg_download_link(fig, filename="chart.svg"):
     return href
 
 
-# --- Main App Logic (Streamlined UI, ALL Dashboard features removed) ---
+# --- Main App Logic (Streamlined UI, NO DASHBOARD features) ---
 def main():
     st.title("📊 Proportional Stacked Bar Chart Tool (SVG Replica)")
     st.markdown("Generates a static chart matching the provided design exactly, ready for SVG download.")
@@ -271,7 +263,7 @@ def main():
         st.warning("The dataset contains no suitable columns for categorical grouping.")
         return
 
-    # 2. Controls (Clean UI, NO SIDEBAR/dashboard components)
+    # 2. Controls 
     st.header("Chart Configuration")
     col1, col2 = st.columns(2)
     
